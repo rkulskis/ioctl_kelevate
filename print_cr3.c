@@ -11,7 +11,7 @@
 int main() {
     int fd;
     unsigned long cr3_value;
-    unsigned long arg = 1; // Argument to pass to the ioctl
+    unsigned long arg = 1;
 
     // Open the device file
     fd = open("/dev/symbi_ioctl", O_RDWR);

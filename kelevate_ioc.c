@@ -4,7 +4,10 @@
 #include <linux/ioctl.h>
 #include <linux/uaccess.h>
 #include <linux/percpu.h>
+#include <linux/percpu-defs.h>
+#include <linux/smp.h>
 #include <asm/processor.h>
+#include <linux/sched/task_stack.h>
 
 struct SymbiReg {
     union {
@@ -21,8 +24,7 @@ struct SymbiReg {
 #define MAJOR_NUM 448
 #define MINOR_NUM 1
 #define DEVICE_NAME "symbi_ioctl"
-#define SYMBI_IOCTL _IOWR(MAJOR_NUM, MINOR_NUM, struct SymbiReg)
-DEFINE_PER_CPU(unsigned long, cpu_current_top_of_stack);
+#define SYMBI_IOCTL _IOWR(MAJOR_NUM, MINOR_NUM, unsigned long)
 
 uint64_t symbi_check_elevate(void);
  uint64_t symbi_check_elevate(){
@@ -69,11 +71,12 @@ uint64_t symbi_check_elevate(void);
  }
 
  void symbi_elevate(struct pt_regs* regs, struct SymbiReg* sreg){
+   printk ("INSIDE symbi_elevate\n");
    // Swing symbiote reg
    if(current->symbiote_elevated == 1 ){
      printk("Already Elevated???\n");
    } else{
-     /* printk("setting elevated\n"); */
+     printk("setting elevated\n");
      current->symbiote_elevated = 1;
    }
 
@@ -81,9 +84,11 @@ uint64_t symbi_check_elevate(void);
    regs->ss = 0x18;
    regs->cs = 0x10;
 
+   printk("modify stack mem for iret\n");
+
    // Disable interrupts for user
    if(sreg->int_disable){
-     /* printk("setting int disabled\n"); */
+     printk("setting int disabled\n");
      regs->flags= regs->flags & (~(1<<9)); // x86 specific
    }
  }
@@ -113,25 +118,31 @@ static long int symbi_ioctl(struct file *file, unsigned int cmd, unsigned long a
 {
     struct SymbiReg sreg;
     struct pt_regs *regs;
-    unsigned long *stack_pointer;
+    unsigned long sp;
 
+    printk ("INSIDE symbi_ioctl\n");
     switch (cmd) {
         case SYMBI_IOCTL:
             if (copy_from_user(&sreg.raw, (void __user *)arg, sizeof(unsigned long)))
                 return -EFAULT;
 
-	    stack_pointer = (unsigned long *)get_cpu_var(cpu_current_top_of_stack);
-
-            regs = (struct pt_regs *)this_cpu_read(stack_pointer) - 1;
+	    sp = current_stack_pointer;
+	    printk ("SP=%lu\n", sp);
+            regs = (struct pt_regs *)sp - 1;
+	    printk ("regs=%lu\n", regs);	    
             if (sreg.debug) {
                 symbi_debug_entry(regs, &sreg);
             }
 
             if (sreg.query) {
+	      printk ("1\n");
                 symbi_query(regs);
             } else if (sreg.elevate) {
+	      printk ("2\n");	      
                 symbi_elevate(regs, &sreg);
+	      printk ("200200\n");	      		
             } else if (!sreg.elevate) {
+	      printk ("3\n");	      	      
                 symbi_lower(regs, &sreg);
             } else {
                 printk("Elevation error: Unexpected input %llx\n", sreg.raw);
@@ -139,7 +150,7 @@ static long int symbi_ioctl(struct file *file, unsigned int cmd, unsigned long a
                 return -EINVAL;
             }
 
-            if (sreg.debug) {
+            if (1 || sreg.debug) {
                 printk("Elevate bit now %llx\n", symbi_check_elevate());
                 symbi_print_user_reg_state(regs);
                 printk("About to return from elevate syscall\n");
