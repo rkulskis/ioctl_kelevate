@@ -4,3 +4,6 @@ To get started with this development follow the steps belo:
 3. clone [Symbi-OS/Symbi-OS](https://github.com/Symbi-OS/Symbi-OS)
 4. run `make 5.14.0-kElevate` to make a container which matches the
 5. run `sudo dnf install kmod`
+
+sudo grubby --set-default=vmlinuz-5.14.0-kElevate+
+sudo reboot
